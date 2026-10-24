@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: devstory-ai-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: MAX_UPLOAD_MB
+        value: 10
+      - key: GEMINI_MODEL_FLASH
+        value: gemini-2.5-flash
+      - key: GEMINI_MODEL_PRO
+        value: gemini-2.5-pro
+      - key: SUPABASE_STORAGE_BUCKET
+        value: sketches_audio
+      - key: ALLOWED_ORIGINS
+        value: "http://localhost:3000,https://devstory.app,https://*.vercel.app"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
