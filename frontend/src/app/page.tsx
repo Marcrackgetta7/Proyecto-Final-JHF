@@ -153,9 +153,12 @@ export default function HomePage() {
   }, [output, isEphemeralGuest]);
 
   // 2. Cargar proyectos de usuario registrado
+  const maxQuota = 2 + extraCredits;
+
   const loadUserProjects = async (userId: string, token?: string) => {
     const list = await fetchProjects(userId, token);
     setProjects(list);
+    setUsedCount((prev) => Math.max(prev, list.length));
   };
 
   useEffect(() => {
@@ -168,19 +171,22 @@ export default function HomePage() {
   const handleGenerate = async (payload: GeneratePayload) => {
     // Si usuario free intenta pro, interceptar y abrir modal
     if (payload.modelTier === "pro" && userPlan === "free") {
+      setIsLoading(false);
       setIsUpgradeModalOpen(true);
       return;
     }
 
     // Límite de invitados: solo 1 generación de prueba sin registro
     if (!user && guestGenerationCount >= 1) {
+      setIsLoading(false);
       setAuthModalTab("signup");
       setIsAuthModalOpen(true);
       showToast("🔒 Has alcanzado el límite del modo invitado. Crea tu cuenta gratis para continuar.");
       return;
     }
 
-    if (user && userPlan === "free" && usedCount >= 5 + extraCredits) {
+    if (user && userPlan === "free" && usedCount >= maxQuota) {
+      setIsLoading(false);
       setIsUpgradeModalOpen(true);
       return;
     }
@@ -188,9 +194,12 @@ export default function HomePage() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     try {
       const formData = new FormData();
-      formData.append("prompt_text", payload.promptText);
+      formData.append("prompt_text", payload.promptText || "");
       formData.append("model_tier", payload.modelTier);
 
       if (user) {
@@ -215,7 +224,10 @@ export default function HomePage() {
         method: "POST",
         headers,
         body: formData,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -226,20 +238,21 @@ export default function HomePage() {
       }
 
       const result = await res.json();
+      const raw = result.output || result.data || result;
 
       const storyOutput: DevStoryOutput = {
-        title: result.title || "DevStory Output",
-        prd_markdown: result.prd_markdown || "",
-        jira_json: result.jira_json || [],
-        mermaid_diagram: result.mermaid_diagram || "",
-        react_code: result.react_code || "",
+        title: raw.title || result.title || "DevStory Output",
+        prd_markdown: raw.prd_markdown || result.prd_markdown || "",
+        jira_json: Array.isArray(raw.jira_json) ? raw.jira_json : (Array.isArray(result.jira_json) ? result.jira_json : []),
+        mermaid_diagram: raw.mermaid_diagram || result.mermaid_diagram || "",
+        react_code: raw.react_code || result.react_code || "",
       };
 
       setOutput(storyOutput);
       setActiveTab("canvas");
 
       if (user) {
-        setUsedCount((prev) => Math.min(prev + 1, 5 + extraCredits));
+        setUsedCount((prev) => Math.min(prev + 1, maxQuota));
         setIsEphemeralGuest(false);
         if (result.project_id) {
           setCurrentProjectId(result.project_id);
@@ -252,11 +265,17 @@ export default function HomePage() {
         setCurrentProjectId("");
       }
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error("Fallo al generar con DevStory AI:", err);
-      setErrorMessage(
-        err?.message || "Ocurrió un error inesperado al orquestar la generación con el backend."
-      );
+      if (err.name === "AbortError") {
+        setErrorMessage("La generación superó el tiempo límite de espera (60s). Por favor reintenta.");
+      } else {
+        setErrorMessage(
+          err?.message || "Ocurrió un error inesperado al orquestar la generación con el backend."
+        );
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
@@ -380,7 +399,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Vista Desktop (>= 768px): Audio, +10 Gratis, Cuota, Proyectos y Auth */}
+          {/* Vista Desktop (>= 768px): Audio, +3 Gratis, Cuota, Proyectos y Auth */}
           <div className="hidden md:flex items-center gap-2.5">
             {/* Reproductor Suno AI */}
             <AmbientPlayer />
@@ -390,10 +409,10 @@ export default function HomePage() {
               type="button"
               onClick={() => setIsReferralModalOpen(true)}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-gradient-to-r from-emerald-600/20 to-teal-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 transition shadow-sm"
-              title="Invita a un colega y obtén +10 generaciones Pro gratis"
+              title="Invita a un colega y obtén +3 generaciones Pro gratis"
             >
               <Gift className="w-3.5 h-3.5 text-emerald-400" />
-              <span>🎁 +10 Gratis</span>
+              <span>🎁 +3 Gratis</span>
             </button>
 
             {/* Contador de Cuota Free / Pro */}
@@ -408,7 +427,7 @@ export default function HomePage() {
                   <strong className="text-amber-300">Plan Pro: Ilimitado</strong>
                 ) : user ? (
                   <>
-                    Plan Free: <strong className="text-indigo-300">{usedCount}/{5 + extraCredits}</strong>
+                    Plan Free: <strong className="text-indigo-300">{usedCount}/{maxQuota}</strong>
                   </>
                 ) : (
                   <>
@@ -545,7 +564,7 @@ export default function HomePage() {
                     <strong className="text-amber-300">Plan Pro: Ilimitado</strong>
                   ) : user ? (
                     <>
-                      Plan Free: <strong className="text-indigo-300">{usedCount}/{5 + extraCredits}</strong>
+                      Plan Free: <strong className="text-indigo-300">{usedCount}/{maxQuota}</strong>
                     </>
                   ) : (
                     <>
@@ -577,7 +596,7 @@ export default function HomePage() {
                 className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600/20 to-teal-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 transition shadow-sm"
               >
                 <Gift className="w-4 h-4 text-emerald-400" />
-                <span>🎁 Obtener +10 Gratis</span>
+                <span>🎁 +3 Gratis</span>
               </button>
 
               <div className="shrink-0 flex items-center justify-center">
@@ -740,8 +759,8 @@ export default function HomePage() {
         onClose={() => setIsReferralModalOpen(false)}
         userId={user?.id}
         onAddCredits={(credits) => {
-          setExtraCredits((prev) => prev + credits);
-          showToast(`🎉 ¡Referido exitoso! Se han añadido +${credits} generaciones a tu cuenta.`);
+          setExtraCredits((prev) => prev + (credits || 3));
+          showToast("🎉 +3 proyectos gratis desbloqueados");
         }}
       />
 
@@ -777,7 +796,7 @@ export default function HomePage() {
 
       {/* Footer Minimalista */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-500">
-        DevStory AI — Impulsado por Google Gemini 2.5 y Supabase. Costo de infraestructura $0 USD.
+        DevStory AI — Impulsado por Google Gemini 3.8 y Supabase. Costo de infraestructura $0 USD.
       </footer>
     </div>
   );

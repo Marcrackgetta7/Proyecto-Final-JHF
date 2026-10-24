@@ -180,12 +180,20 @@ export default function MultimodalInput({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promptText.trim() && !sketchFile && !audioBlob) {
-      alert("Por favor ingresa requerimientos en texto, un boceto o una nota de voz.");
-      return;
-    }
+    if (isLoading) return;
+
+    // Permitir entrada flexible o usar prompt base por defecto si todo está vacío
+    const trimmedPrompt = promptText.trim();
+    const effectivePrompt =
+      trimmedPrompt ||
+      (sketchFile
+        ? "Generar especificación técnica y prototipo interactivo a partir del boceto adjunto."
+        : audioBlob
+        ? "Generar especificación técnica y prototipo interactivo a partir de la nota de voz adjunta."
+        : "Dashboard de gestión y analíticas con diseño moderno, componentes interactivos y métricas en tiempo real.");
+
     onGenerate({
-      promptText,
+      promptText: effectivePrompt,
       sketchFile,
       audioBlob,
       modelTier,

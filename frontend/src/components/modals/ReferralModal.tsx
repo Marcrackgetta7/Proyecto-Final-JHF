@@ -31,7 +31,7 @@ export default function ReferralModal({
   };
 
   const handleSimulateReferral = () => {
-    onAddCredits(10);
+    onAddCredits(3);
     setClaimed(true);
     setTimeout(() => {
       setClaimed(false);
@@ -61,10 +61,10 @@ export default function ReferralModal({
             Programa de Referidos B2B
           </span>
           <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight mt-1">
-            Invita a un Desarrollador y Gana <span className="text-emerald-400">+10 Créditos Pro</span>
+            Invita a un Desarrollador y Obtén <span className="text-emerald-400">+3 Proyectos Gratis</span>
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2">
-            Por cada colega o equipo que cree una cuenta con tu enlace, ambos reciben 10 generaciones Pro gratuitas con Gemini 2.5.
+            Invita a un desarrollador y obtén +3 proyectos adicionales gratis impulsados por Gemini 3.8.
           </p>
         </div>
 
@@ -112,9 +112,9 @@ export default function ReferralModal({
           <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
             <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Generaciones Extra</span>
+              <span>Proyectos Extra</span>
             </div>
-            <p className="text-lg font-bold text-emerald-400">+10 por referido</p>
+            <p className="text-lg font-bold text-emerald-400">+3 por referido</p>
           </div>
         </div>
 
@@ -129,12 +129,12 @@ export default function ReferralModal({
             {claimed ? (
               <>
                 <Check className="w-4 h-4 text-white" />
-                <span>¡Créditos acreditados con éxito!</span>
+                <span>¡+3 proyectos gratis desbloqueados!</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                <span>Verificar Invitación (+10 créditos)</span>
+                <span>Verificar Invitación (+3 proyectos gratis)</span>
               </>
             )}
           </button>

@@ -121,6 +121,8 @@ export async function refineProject(
   modelTier: string = "flash",
   token?: string
 ): Promise<{ ok: boolean; data?: DevStoryOutput; error?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -139,7 +141,10 @@ export async function refineProject(
         project_id: projectId,
         model_tier: modelTier,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -147,8 +152,13 @@ export async function refineProject(
     }
 
     const data = await res.json();
-    return { ok: true, data: data.data };
+    const resolvedData = data.output || data.data || data;
+    return { ok: true, data: resolvedData };
   } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === "AbortError") {
+      return { ok: false, error: "El refinamiento superó el tiempo límite (60s). Por favor reintenta." };
+    }
     return { ok: false, error: err?.message || "Error de conexión al refinar" };
   }
 }

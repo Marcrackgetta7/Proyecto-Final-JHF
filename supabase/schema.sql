@@ -1,7 +1,7 @@
 -- =============================================================================
 -- DevStory AI — Supabase schema
 -- Tablas: users, projects, generations | RLS | Storage bucket sketches_audio
--- Rate limiting: plan Free = máx. 5 generaciones por mes (usuario e IP)
+-- Rate limiting: plan Free = máx. 2 generaciones/proyectos por mes (usuario e IP)
 -- Ejecutar en Supabase SQL Editor (idempotente en lo posible).
 -- =============================================================================
 
@@ -29,7 +29,7 @@ create or replace function public.free_monthly_limit()
 returns integer
 language sql
 immutable
-as $$ select 5 $$;
+as $$ select 2 $$;
 
 -- -----------------------------------------------------------------------------
 -- Tabla: users (perfil 1:1 con auth.users)
@@ -69,7 +69,7 @@ create table if not exists public.generations (
   input_text       text,
   sketch_path      text,               -- ruta en bucket sketches_audio
   audio_path       text,               -- ruta en bucket sketches_audio
-  model_used       text not null default 'gemini-2.5-flash',
+  model_used       text not null default 'gemini-3.8-flash',
   status           public.generation_status not null default 'pending',
   -- Salida estructurada (DevStoryOutput)
   title            text,
@@ -168,7 +168,7 @@ create trigger generations_enforce_ownership
   for each row execute function public.enforce_generation_ownership();
 
 -- -----------------------------------------------------------------------------
--- RATE LIMITING: máx. 5 generaciones / mes calendario (UTC) en plan Free
+-- RATE LIMITING: máx. 2 generaciones / mes calendario (UTC) en plan Free
 -- Cuenta por usuario y, si hay IP, también por IP (evita multi-cuentas).
 -- Las generaciones 'failed' no consumen cuota.
 -- -----------------------------------------------------------------------------

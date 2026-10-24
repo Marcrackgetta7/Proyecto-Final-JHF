@@ -77,18 +77,18 @@ export default function UpgradeProModal({
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                   Plan Free
                 </span>
-                <span className="text-lg font-bold text-slate-200">$0 USD</span>
+                <span className="text-lg font-bold text-slate-200">$0 /mes</span>
               </div>
               <p className="text-[11px] text-slate-500 mb-4">Para pruebas rápidas y prototipos iniciales.</p>
 
               <ul className="space-y-2 text-xs text-slate-300">
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>5 generaciones mensuales</span>
+                  <span>Hasta 2 proyectos gratis</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Motor Gemini 3.8 Flash</span>
+                  <span>Modelo Gemini 3.8 Flash</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -128,11 +128,11 @@ export default function UpgradeProModal({
               <ul className="space-y-2 text-xs text-slate-100">
                 <li className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span className="font-semibold text-white">Generaciones ilimitadas 24/7</span>
+                  <span className="font-semibold text-white">Proyectos ilimitados</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                  <span>Motor Gemini 3.8 Pro (Razonamiento profundo)</span>
+                  <span>Modelo Gemini 3.8 Pro (Razonamiento profundo)</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0" />

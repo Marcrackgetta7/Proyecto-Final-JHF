@@ -42,11 +42,11 @@ gemini_service = GeminiService()
 supabase_service = SupabaseService()
 
 
-def _resolve_user_id(user_id: str | None, authorization: str | None) -> str | None:
+def _resolve_user_id(user_id: Any, authorization: Any) -> str | None:
     """Extrae el user_id explícito o decodifica el token Bearer en Supabase."""
-    if user_id and user_id.strip():
+    if isinstance(user_id, str) and user_id.strip():
         return user_id.strip()
-    if authorization and authorization.startswith("Bearer "):
+    if isinstance(authorization, str) and authorization.startswith("Bearer "):
         token = authorization.split("Bearer ", 1)[1].strip()
         try:
             if supabase_service._client:
@@ -108,11 +108,11 @@ async def generate(
     voice: UploadFile | None = File(None),
     authorization: str | None = Header(None),
 ) -> dict[str, Any]:
-    """Genera PRD, backlog de Jira, diagrama Mermaid y componente React a partir de entradas multimodales.
+    prompt_str = prompt_text if isinstance(prompt_text, str) else ""
+    tier_str = model_tier if isinstance(model_tier, str) else "flash"
+    proj_id_str = project_id if isinstance(project_id, str) else None
 
-    Modo Invitado: si no hay user_id autenticado, NO persiste en DB ni sube a Storage (100% efímero en memoria).
-    """
-    client_ip = request.client.host if request.client else None
+    client_ip = request.client.host if (request and request.client) else None
     resolved_user = _resolve_user_id(user_id, authorization)
 
     # 1. Validar cuota mensual (Rate Limiting para plan Free) si está autenticado
@@ -124,29 +124,41 @@ async def generate(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=str(e),
             )
+        except Exception as e:
+            logger.warning("Error comprobando rate limit en Supabase: %s", e)
 
     # 2. Leer y validar archivos subidos (límite MAX_UPLOAD_MB)
     sketch_bytes: bytes | None = None
     sketch_mime: str | None = None
-    if sketch:
-        sketch_bytes = await sketch.read()
-        if len(sketch_bytes) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"La imagen del boceto excede el límite máximo de {MAX_UPLOAD_MB}MB.",
-            )
-        sketch_mime = sketch.content_type or "image/png"
+    if sketch and hasattr(sketch, "read") and getattr(sketch, "filename", None):
+        try:
+            sketch_bytes = await sketch.read()
+            if sketch_bytes and len(sketch_bytes) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"La imagen del boceto excede el límite máximo de {MAX_UPLOAD_MB}MB.",
+                )
+            sketch_mime = getattr(sketch, "content_type", None) or "image/png"
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning("Error leyendo archivo de boceto: %s", e)
 
     voice_bytes: bytes | None = None
     voice_mime: str | None = None
-    if voice:
-        voice_bytes = await voice.read()
-        if len(voice_bytes) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"El audio excede el límite máximo de {MAX_UPLOAD_MB}MB.",
-            )
-        voice_mime = voice.content_type or "audio/webm"
+    if voice and hasattr(voice, "read") and getattr(voice, "filename", None):
+        try:
+            voice_bytes = await voice.read()
+            if voice_bytes and len(voice_bytes) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"El audio excede el límite máximo de {MAX_UPLOAD_MB}MB.",
+                )
+            voice_mime = getattr(voice, "content_type", None) or "audio/webm"
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning("Error leyendo archivo de audio: %s", e)
 
     # 3. Determinar tipo de entrada
     if sketch_bytes and voice_bytes:
@@ -162,47 +174,59 @@ async def generate(
     sketch_path: str | None = None
     audio_path: str | None = None
     if resolved_user:
-        if sketch_bytes and sketch:
-            sketch_path = supabase_service.upload_file(
-                file_bytes=sketch_bytes,
-                filename=sketch.filename or "boceto.png",
-                content_type=sketch_mime or "image/png",
-                user_id=resolved_user,
-                project_id=project_id,
-            )
-        if voice_bytes and voice:
-            audio_path = supabase_service.upload_file(
-                file_bytes=voice_bytes,
-                filename=voice.filename or "audio.webm",
-                content_type=voice_mime or "audio/webm",
-                user_id=resolved_user,
-                project_id=project_id,
-            )
+        try:
+            if sketch_bytes and sketch:
+                sketch_path = supabase_service.upload_file(
+                    file_bytes=sketch_bytes,
+                    filename=sketch.filename or "boceto.png",
+                    content_type=sketch_mime or "image/png",
+                    user_id=resolved_user,
+                    project_id=proj_id_str,
+                )
+            if voice_bytes and voice:
+                audio_path = supabase_service.upload_file(
+                    file_bytes=voice_bytes,
+                    filename=voice.filename or "audio.webm",
+                    content_type=voice_mime or "audio/webm",
+                    user_id=resolved_user,
+                    project_id=proj_id_str,
+                )
+        except Exception as e:
+            logger.warning("Error en upload_file a Supabase Storage: %s", e)
 
     # 5. Orquestar inferencia con Google Gemini (con fallback resiliente y reintento en cascada)
     output: DevStoryOutput = gemini_service.generate_devstory(
-        prompt_text=prompt_text,
+        prompt_text=prompt_str,
         sketch_bytes=sketch_bytes,
         sketch_mime=sketch_mime,
         voice_bytes=voice_bytes,
         voice_mime=voice_mime,
-        model_tier=model_tier,
+        model_tier=tier_str,
     )
 
-    model_used = "gemini-3.8-pro" if model_tier.lower() == "pro" else "gemini-3.8-flash"
-    response_payload = output.model_dump()
-    response_payload["model_used"] = model_used
+    model_used = "gemini-3.8-pro" if tier_str.lower() == "pro" else "gemini-3.8-flash"
+    output_dict = output.model_dump()
+    response_payload: dict[str, Any] = {
+        "title": output.title,
+        "prd_markdown": output.prd_markdown,
+        "jira_json": [s.model_dump() for s in output.jira_json],
+        "mermaid_diagram": output.mermaid_diagram,
+        "react_code": output.react_code,
+        "persisted": False,
+        "project_id": project_id,
+        "id": None,
+        "sketch_path": sketch_path,
+        "audio_path": audio_path,
+        "model_used": model_used,
+        "output": output_dict,
+        "data": output_dict,
+    }
 
     # 6. Modo Invitado Efímero: NO guardar en base de datos si no hay usuario autenticado
     if not resolved_user:
-        response_payload["id"] = None
-        response_payload["project_id"] = None
-        response_payload["persisted"] = False
-        response_payload["sketch_path"] = None
-        response_payload["audio_path"] = None
         return response_payload
 
-    # Guardar en base de datos si está autenticado
+    # Guardar en base de datos si está autenticado (con protección ante errores)
     try:
         saved_record = supabase_service.save_generation(
             output=output,
@@ -215,17 +239,17 @@ async def generate(
             model_used=model_used,
             ip_address=client_ip,
         )
+        response_payload["id"] = saved_record.get("id")
+        response_payload["project_id"] = saved_record.get("project_id")
+        response_payload["persisted"] = True
     except RateLimitExceeded as e:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(e),
         )
-
-    response_payload["id"] = saved_record.get("id")
-    response_payload["project_id"] = saved_record.get("project_id")
-    response_payload["persisted"] = True
-    response_payload["sketch_path"] = sketch_path
-    response_payload["audio_path"] = audio_path
+    except Exception as e:
+        logger.warning("Fallo al guardar generación en Supabase: %s. Entregando prototipo en memoria.", e)
+        response_payload["persisted"] = False
 
     return response_payload
 
@@ -277,8 +301,20 @@ async def refine_project(
     )
 
     model_used = "gemini-3.8-pro" if payload.model_tier.lower() == "pro" else "gemini-3.8-flash"
-    result = refined.model_dump()
-    result["model_used"] = model_used
+    refined_dict = refined.model_dump()
+    result: dict[str, Any] = {
+        "title": refined.title,
+        "prd_markdown": refined.prd_markdown,
+        "jira_json": [s.model_dump() for s in refined.jira_json],
+        "mermaid_diagram": refined.mermaid_diagram,
+        "react_code": refined.react_code,
+        "persisted": False,
+        "project_id": payload.project_id,
+        "id": None,
+        "model_used": model_used,
+        "output": refined_dict,
+        "data": refined_dict,
+    }
 
     # Si el usuario está autenticado, registrar la nueva generación afinada
     if resolved_user:

@@ -19,6 +19,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "sketches_audio")
 
+FREE_PLAN_LIMIT = 2
+REFERRAL_BONUS_PROJECTS = 3
+
 
 class RateLimitExceeded(Exception):
     """Excepción lanzada cuando el usuario supera la cuota mensual del plan Free."""
@@ -46,7 +49,7 @@ class SupabaseService:
         return self._client is not None
 
     def check_rate_limit(self, user_id: str | None, ip_address: str | None = None) -> None:
-        """Verifica si el usuario del plan Free ha superado el límite mensual (máx 5 generaciones)."""
+        """Verifica si el usuario del plan Free ha superado el límite base (máx 2 proyectos gratis)."""
         if not user_id or not self._client:
             return
 
@@ -86,9 +89,9 @@ class SupabaseService:
             )
 
             count = gen_res.count if gen_res.count is not None else len(gen_res.data or [])
-            if count >= 5:
+            if count >= FREE_PLAN_LIMIT:
                 raise RateLimitExceeded(
-                    "Límite de cuota alcanzado: El plan Free permite un máximo de 5 generaciones al mes."
+                    f"Límite de cuota alcanzado: El plan Free permite hasta {FREE_PLAN_LIMIT} proyectos gratis."
                 )
 
         except RateLimitExceeded:
@@ -164,7 +167,7 @@ class SupabaseService:
         input_text: str | None = None,
         sketch_path: str | None = None,
         audio_path: str | None = None,
-        model_used: str = "gemini-2.5-flash",
+        model_used: str = "gemini-3.8-flash",
         ip_address: str | None = None,
     ) -> dict[str, Any]:
         """Guarda la generación en la base de datos de Supabase.
@@ -222,7 +225,7 @@ class SupabaseService:
             err_msg = str(e)
             if "RATE_LIMIT_EXCEEDED" in err_msg or "P0429" in err_msg:
                 raise RateLimitExceeded(
-                    "El trigger de Supabase rechazó la inserción: cuota mensual de 5 generaciones superada."
+                    f"El trigger de Supabase rechazó la inserción: cuota de {FREE_PLAN_LIMIT} proyectos gratis superada."
                 )
             logger.warning("Error al guardar generación en Supabase: %s", e)
             return record
